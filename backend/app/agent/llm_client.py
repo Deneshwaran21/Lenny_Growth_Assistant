@@ -49,23 +49,22 @@ async def _call_anthropic(settings: Settings, system: str, prompt: str) -> LLMRe
 async def _call_openai(settings: Settings, system: str, prompt: str) -> LLMResult:
     if not settings.OPENAI_API_KEY:
         raise LLMUnavailableError("OPENAI_API_KEY not configured")
-    # Use the base URL if provided, otherwise fall back to the default OpenAI endpoint
-    base_url = settings.OPENAI_BASE_URL or "https://api.openai.com/v1"
+    # Construct the native Gemini endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.OPENAI_MODEL}:generateContent"
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
         resp = await client.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            url,
+            headers={"x-goog-api-key": settings.OPENAI_API_KEY},
             json={
-                "model": settings.OPENAI_MODEL,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
+                "contents": [{
+                    "role": "user",
+                    "parts": [{"text": f"{system}\n\n{prompt}"}]
+                }]
             },
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"]
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
         return LLMResult(text=text, provider="openai", model=settings.OPENAI_MODEL)
 
 
