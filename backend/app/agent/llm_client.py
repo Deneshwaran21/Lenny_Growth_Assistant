@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio  # added for retry delay
 
 import httpx
 
@@ -52,20 +53,32 @@ async def _call_openai(settings: Settings, system: str, prompt: str) -> LLMResul
     # Construct the native Gemini endpoint
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.OPENAI_MODEL}:generateContent"
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
-        resp = await client.post(
-            url,
-            headers={"x-goog-api-key": settings.OPENAI_API_KEY},
-            json={
-                "contents": [{
-                    "role": "user",
-                    "parts": [{"text": f"{system}\n\n{prompt}"}]
-                }]
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        return LLMResult(text=text, provider="openai", model=settings.OPENAI_MODEL)
+        # Retry loop with exponential backoff for 503 errors
+        for attempt in range(4):  # Try up to 4 times
+            resp = await client.post(
+                url,
+                headers={"x-goog-api-key": settings.OPENAI_API_KEY},
+                json={
+                    "contents": [{
+                        "role": "user",
+                        "parts": [{"text": f"{system}\n\n{prompt}"}]
+                    }]
+                },
+            )
+            if resp.status_code == 503:
+                # Backoff: wait 1s, 2s, 4s, then give up
+                if attempt < 3:
+                    wait_seconds = 2 ** attempt  # 1, 2, 4
+                    logger.warning(f"Gemini 503 (overloaded). Retrying in {wait_seconds}s...")
+                    await asyncio.sleep(wait_seconds)
+                    continue
+                else:
+                    raise LLMUnavailableError("Gemini API unavailable after 4 attempts")
+            
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["candidates"][0]["content"]["parts"][0]["text"]
+            return LLMResult(text=text, provider="openai", model=settings.OPENAI_MODEL)
 
 
 async def _call_ollama(settings: Settings, system: str, prompt: str) -> LLMResult:
