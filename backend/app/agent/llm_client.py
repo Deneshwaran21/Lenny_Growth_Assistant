@@ -56,12 +56,12 @@ async def _call_anthropic(settings: Settings, system: str, prompt: str) -> LLMRe
         return LLMResult(text=text, provider="anthropic", model=settings.ANTHROPIC_MODEL)
 
 
-async def _call_openai(settings: Settings, system: str, prompt: str) -> LLMResult:
+async def _call_openai(settings, system, prompt):
     if not settings.OPENAI_API_KEY:
         raise LLMUnavailableError("OPENAI_API_KEY not configured")
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            f"{settings.OPENAI_BASE_URL}/chat/completions",  # <-- Use the base_url
             headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
             json={
                 "model": settings.OPENAI_MODEL,
