@@ -1,13 +1,3 @@
-"""
-Provider-agnostic LLM client with fallback.
-
-Flow: caller asks for `settings.LLM_PROVIDER`. If that provider is not
-configured (missing API key) or the call fails/times out, we log a
-structured warning and fall back once to `settings.FALLBACK_PROVIDER`
-(default: ollama, since it's local and has no external dependency). If the
-fallback also fails, we raise LLMUnavailableError and the router returns a
-graceful degraded response instead of a 500 (see routers/chat.py).
-"""
 from __future__ import annotations
 
 import logging
@@ -56,12 +46,14 @@ async def _call_anthropic(settings: Settings, system: str, prompt: str) -> LLMRe
         return LLMResult(text=text, provider="anthropic", model=settings.ANTHROPIC_MODEL)
 
 
-async def _call_openai(settings, system, prompt):
+async def _call_openai(settings: Settings, system: str, prompt: str) -> LLMResult:
     if not settings.OPENAI_API_KEY:
         raise LLMUnavailableError("OPENAI_API_KEY not configured")
+    # Use the base URL if provided, otherwise fall back to the default OpenAI endpoint
+    base_url = settings.OPENAI_BASE_URL or "https://api.openai.com/v1"
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS) as client:
         resp = await client.post(
-            f"{settings.OPENAI_BASE_URL}/chat/completions",  # <-- Use the base_url
+            f"{base_url}/chat/completions",
             headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
             json={
                 "model": settings.OPENAI_MODEL,

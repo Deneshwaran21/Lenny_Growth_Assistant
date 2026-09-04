@@ -38,6 +38,8 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4o-mini"
+    # Add this line: base URL for OpenAI-compatible endpoints (e.g., Gemini)
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.2:3b"
